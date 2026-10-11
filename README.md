@@ -47,7 +47,8 @@ tests/run_all_tests.sh     runs every script and checks planted signals
    `setup/Rprofile_snippet.R` to the project `.Rprofile` and restart R.
 4. Terminal at the project root: `claude`. Approve the `r-longomics` MCP
    server; `/mcp` shows its status.
-5. Check everything works: `bash tests/run_all_tests.sh` (about 4 min).
+5. Check everything works (about 4 min): in RStudio `source("tests/run_all_tests.R")`
+   (any OS), or `bash tests/run_all_tests.sh` on macOS/Linux.
 6. Point `study_config.json` at your data. Patient-level data go in
    `data/`, which is git-ignored.
 

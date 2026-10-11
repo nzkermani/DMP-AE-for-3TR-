@@ -8,3 +8,5 @@ results/
 # never commit patient-level data
 data/
 !testdata/
+tests/test_log.txt
+tests/test_summary.csv
