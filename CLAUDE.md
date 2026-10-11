@@ -1,6 +1,6 @@
 # DMP-AE for 3TR — instructions for Claude
 
-This repository is the Analytics Engine (AE) of the 3TR Data Management
+This repository is the Analytical Engine (AE) of the 3TR Data Management
 Platform (DMP): the analysis layer for multi-omics data collected over
 4 visits.
 
