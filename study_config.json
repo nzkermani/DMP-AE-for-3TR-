@@ -1,0 +1,44 @@
+{
+  "study_name": "example_4visit_multiomics",
+  "metadata_file": "testdata/metadata.csv",
+  "columns": {
+    "sample": "sample_id",
+    "subject": "subject_id",
+    "visit": "visit",
+    "group": "group"
+  },
+  "visits": ["V1", "V2", "V3", "V4"],
+  "time_values": {"V1": 0, "V2": 1, "V3": 2, "V4": 3},
+  "covariates": ["age", "sex"],
+  "batch_column": "batch",
+  "outcomes": {
+    "binary": "responder",
+    "continuous": "fev1",
+    "categorical": ["group", "endotype"],
+    "survival_time": "time_to_exacerbation",
+    "survival_event": "exacerbation"
+  },
+  "default_visit": "V1",
+  "seed": 42,
+  "layers": [
+    {
+      "name": "transcriptomics",
+      "file": "testdata/transcriptomics_counts.csv",
+      "scale": "counts",
+      "feature_type": "gene"
+    },
+    {
+      "name": "proteomics",
+      "file": "testdata/proteomics_log2.csv",
+      "scale": "log2",
+      "feature_type": "protein"
+    },
+    {
+      "name": "metabolomics",
+      "file": "testdata/metabolomics_raw.csv",
+      "scale": "raw_intensity",
+      "feature_type": "metabolite"
+    }
+  ],
+  "output_dir": "results"
+}

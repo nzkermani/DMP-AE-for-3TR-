@@ -1,0 +1,10 @@
+# analysis outputs (regenerate from scripts)
+results/
+.Rhistory
+.RData
+.Rproj.user/
+.DS_Store
+*.Rproj
+# never commit patient-level data
+data/
+!testdata/

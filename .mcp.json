@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "r-longomics": {
+      "type": "stdio",
+      "command": "Rscript",
+      "args": [
+        "-e",
+        "mcptools::mcp_server(tools = 'mcp/longomics_tools.R')"
+      ],
+      "env": {}
+    }
+  }
+}
