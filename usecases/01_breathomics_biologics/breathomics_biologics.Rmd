@@ -1,0 +1,434 @@
+---
+title: "Use case 01 — Exhaled VOCs before and after biologics in severe asthma"
+subtitle: "Reproducing Vassileva et al., *Respir Med* 2026;262:109067 with the DMP-AE skills, on synthetic data"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: show
+    df_print: kable
+params:
+  rerun: false      # TRUE recomputes every step even if results exist
+  n_perm: 20        # permutations for the sPLS-DA null (about 15 s each)
+  boot: 2000        # bootstrap resamples for Kendall tau CIs
+  seed: 2026        # seed for the synthetic data
+---
+
+```{r setup, include = FALSE}
+## The notebook runs from the PROJECT ROOT, because every skill script expects that.
+root <- normalizePath(file.path(dirname(knitr::current_input(dir = TRUE)), "..", ".."))
+knitr::opts_knit$set(root.dir = root)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.align = "center")
+```
+
+```{r helpers, include = FALSE}
+UC   <- "usecases/01_breathomics_biologics"
+CFG  <- file.path(UC, "study_config.json")
+RES  <- file.path(UC, "results")
+rscript <- file.path(R.home("bin"), if (.Platform$OS.type == "windows") "Rscript.exe" else "Rscript")
+
+## Run one skill script as a separate R process (exactly what Claude / MCP
+## run_skill_script does). Skips the run if `done` exists, unless rerun = TRUE.
+skill <- function(script, args = character(), done = NULL, show = 25) {
+  cmd <- paste("Rscript", script, paste(args, collapse = " "))
+  if (!is.null(done) && file.exists(done) && !isTRUE(params$rerun)) {
+    cat("[cached] ", cmd, "\n", sep = ""); return(invisible())
+  }
+  out <- suppressWarnings(system2(rscript, shQuote(c(script, args)), stdout = TRUE, stderr = TRUE))
+  st <- attr(out, "status")
+  cat("$ ", cmd, "\n", paste(utils::tail(out, show), collapse = "\n"), "\n", sep = "")
+  if (!is.null(st) && st != 0) stop("Step failed: ", cmd)
+  invisible(out)
+}
+K <- ".claude/skills"
+rd <- function(...) utils::read.csv(file.path(RES, ...), check.names = FALSE, stringsAsFactors = FALSE)
+kt <- function(d, ...) knitr::kable(d, digits = 3, row.names = FALSE, ...)
+```
+
+# What this notebook is
+
+This is a **worked use case** for the 3TR DMP Analytical Engine. It walks
+through the full analysis in
+
+> Vassileva SM, Shahbazi Khamas S, *et al.* The impact of benralizumab and
+> dupilumab on exhaled volatile organic compound profiles of severe asthma
+> patients – a preliminary analysis. *Respiratory Medicine* 262 (2026) 109067.
+> doi:10.1016/j.rmed.2026.109067
+
+and runs each step with the engine's **skills** (R scripts under
+`.claude/skills/`). The same steps can be run one by one through the MCP
+server or by asking Claude.
+
+**The data are synthetic.** The 3TR-ABC breath data are available only on
+request, so `data/simulate_breath_data.R` generates a cohort with the same
+design and with known ("planted") effects. Numbers below describe the
+simulation, not the 3TR-ABC cohort. The point is the *workflow*: how to
+reproduce the methods, what the outputs look like, and how to check them.
+
+| Paper section | Engine skill | Section here |
+|---|---|---|
+| 2.1–2.2 design, clinical data | `prep-study-setup` | 2–3 |
+| Table 1 | `stats-clinical-association --mode=table1` | 4 |
+| 3.3, Table 3, Fig. 2 | `stats-clinical-association --mode=change` | 5 |
+| 2.5 XCMS table, contaminants, log, batch (limma), Suppl. Fig. 1 | `prep-breathomics-gcms` *(new)* | 6 |
+| 2.5 multilevel sPLS-DA, stepwise elimination, AUROC, LOSO-CV; Fig. 3, Table 2 | `ml-multilevel-splsda` *(new)* | 7 |
+| Fig. 4 longitudinal boxplots | `ml-multilevel-splsda` panel boxplots | 7–8 |
+| Table 4 Kendall correlations | `stats-clinical-association --mode=correlation` *(new)* | 9 |
+| 3.6 medication (Mann–Whitney) | `stats-clinical-association --mode=exposure` *(new)* | 10 |
+| VOC change by biologic | `stats-group-testing --design=between --change_from` | 11 |
+
+# Synthetic cohort
+
+```{r simulate}
+if (!file.exists(file.path(UC, "data", "metadata.csv")) || isTRUE(params$rerun)) {
+  skill(file.path(UC, "data", "simulate_breath_data.R"), c(file.path(UC, "data"), params$seed))
+}
+meta  <- utils::read.csv(file.path(UC, "data", "metadata.csv"), stringsAsFactors = FALSE)
+truth <- utils::read.csv(file.path(UC, "data", "planted_truth.csv"), stringsAsFactors = FALSE)
+addmargins(table(biologic = meta$biologic, visit = factor(meta$visit, c("BL", "M1", "M4"))))
+```
+
+The generator mirrors the paper's design. It has 25 patients from two sites;
+20 started dupilumab and 5 benralizumab. Breath was sampled at baseline (BL)
+and 4 months (M4) for everyone, and at 1 month (M1) for 15 patients. Each
+sample has 4,270 GC-MS ion fragments, of which 1,062 are known contaminants,
+and samples were run in four GC-MS batches. These effects are planted:
+
+```{r truth}
+kt(head(truth[truth$type != "time_effect_background", ], 7))
+```
+
+Fifteen weaker, unnamed time-responsive fragments are also planted. Every
+planted VOC responds in about 80% of patients; the rest is noise. The
+two baseline traits are constant within each patient. The multilevel model
+cannot see them, but the baseline correlations should.
+
+# Study setup
+
+```{r setup-layers}
+skill(file.path(K, "prep-study-setup/scripts/build_layers.R"), CFG,
+      done = file.path(RES, "data/breath_voc_raw_se.rds"))
+cat(readLines(file.path(RES, "setup/design_audit.txt")), sep = "\n")
+```
+
+# Baseline characteristics (Table 1)
+
+```{r table1}
+skill(file.path(K, "stats-clinical-association/scripts/clinical_association.R"),
+      c(paste0("--config=", CFG), "--mode=table1", "--visit=BL",
+        "--vars=sex,age,age_onset,bmi,smoking,pack_years,exacerbations_prev_year,acq5,blood_eos,ige,feno,fev1_pp,fvc_pp,fev1_fvc,biologic,ics_dose,lama,ltra,ocs_maintenance,ocs_dose"),
+      done = file.path(RES, "clinical/table1_BL/table1.csv"), show = 0)
+kt(rd("clinical/table1_BL/table1.csv"))
+```
+
+The skill picks mean (SD) or median [IQR] by a Shapiro–Wilk test, as the
+paper describes ("mean (SD) when data followed normality, median [IQR]
+otherwise").
+
+# Follow-up of clinical parameters (Table 3, Fig. 2)
+
+```{r clinical-change}
+skill(file.path(K, "stats-clinical-association/scripts/clinical_association.R"),
+      c(paste0("--config=", CFG), "--mode=change", "--vars=blood_eos,feno,ige,fev1_pp,acq5,aqlq",
+        "--from=BL", "--to=M4", "--show_visits=BL,M1,M4"),
+      done = file.path(RES, "clinical/change_BLtoM4/change.csv"), show = 0)
+ch <- rd("clinical/change_BLtoM4/change.csv")
+kt(ch[, c("variable", "n_pairs", "test", "summary_BL", "summary_M1", "summary_M4",
+          "estimate_type", "estimate", "ci_low", "ci_high", "p_value")])
+```
+
+```{r fig2, out.width = "95%", echo = FALSE}
+knitr::include_graphics(file.path(root, RES, "clinical/change_BLtoM4/clinical_boxplots.png"), rel_path = FALSE)
+```
+
+Clinical response at 4 months, as defined in the paper:
+
+```{r responders}
+w <- reshape(meta[meta$visit %in% c("BL", "M4"), c("subject_id", "visit", "acq5", "fev1_pp")],
+             idvar = "subject_id", timevar = "visit", direction = "wide")
+data.frame(
+  criterion = c("ACQ decrease >= 0.5", "ACQ < 1.5 at 4 months", "FEV1 improvement >= 10 % points"),
+  n = c(sum(w$acq5.BL - w$acq5.M4 >= 0.5), sum(w$acq5.M4 < 1.5), sum(w$fev1_pp.M4 - w$fev1_pp.BL >= 10)),
+  paper = c(22, 15, 10))
+```
+
+The paper's "≥10%" FEV1 improvement could mean percentage points or a
+relative change; percentage points are used here.
+
+# GC-MS preprocessing (Methods 2.5, Suppl. Fig. 1)
+
+The paper's processing order is: XCMS → contaminant removal → log transform →
+z-score → PCA to check batch → `limma` batch correction. The engine starts
+from the aligned XCMS table, because raw chromatograms are not part of the
+data contract.
+
+```{r preprocess}
+skill(file.path(K, "prep-breathomics-gcms/scripts/breath_preprocess.R"),
+      c(paste0("--config=", CFG), "--layer=breath_voc"),
+      done = file.path(RES, "data/breath_voc_processed_se.rds"), show = 0)
+cat(readLines(file.path(RES, "qc/breath_voc_breath_qc.txt")), sep = "\n")
+```
+
+```{r suppfig1, out.width = "95%", echo = FALSE}
+knitr::include_graphics(file.path(root, RES, "qc/breath_voc_breath_pca.png"), rel_path = FALSE)
+```
+
+As in the paper, 4,270 fragments go in and 3,208 remain after contaminant
+removal. Batch correction removes the batch structure from the leading PCs.
+Here batches are nested within site, so the correction also removes site
+differences; the QC file flags this.
+
+# Multilevel sPLS-DA: baseline vs 4 months (Fig. 3, Table 2)
+
+The paper's model, with its settings:
+
+* fragments z-scored, **multilevel** decomposition (within-patient variation only);
+* sPLS-DA with keepX tuned, then **stepwise backward elimination**: a feature is
+  kept only if removing it drops the AUC by more than 5%, with a target AUC of about 0.9;
+* AUROC of the final model on the full data, then **leave-one-subject-out CV**
+  with the panel fixed.
+
+The skill also adds a **nested cross-validation**, which repeats tuning and
+elimination inside every outer fold (patient-grouped 5-fold × 5 repeats), and
+a **within-patient permutation null**. These are the checks the paper's
+design needs.
+
+```{r splsda}
+run <- "splsda/BLvsM4_breath_voc"
+skill(file.path(K, "ml-multilevel-splsda/scripts/multilevel_splsda.R"),
+      c(paste0("--config=", CFG), "--layer=breath_voc", "--visits=BL,M4",
+        "--drop_max=0.05", "--target_auc=0.9", "--elim_auc=train",
+        paste0("--n_perm=", params$n_perm), "--plot_visits=BL,M1,M4", "--colour_by=biologic"),
+      done = file.path(RES, run, "performance.csv"), show = 0)
+tun <- rd(run, "tuning.csv"); el <- rd(run, "elimination_log.csv")
+cat(sprintf("Tuned keepX per component: %s; %d fragments entered elimination; final panel: %d\n",
+            paste(tun$keepX[tapply(seq_len(nrow(tun)), tun$comp, function(i) i[which.max(tun$loso_auc[i])])], collapse = ", "),
+            el$n_features[1], utils::tail(el$n_features, 1)))
+kt(utils::tail(el, 8))
+```
+
+**Table 2 equivalent: the selected panel**
+
+```{r panel}
+panel <- rd(run, "panel.csv")
+panel$planted <- ifelse(panel$feature %in% truth$feature[truth$type == "time_effect"], "planted VOC",
+                 ifelse(panel$feature %in% truth$feature, "planted background", "noise"))
+kt(panel[, c("feature", "compound", "mz", "rt_s", "class", "formula", "direction", "n_up", "n_down", "planted")])
+```
+
+```{r fig3, fig.show = "hold", out.width = "48%", echo = FALSE}
+knitr::include_graphics(file.path(root, RES, run, c("sample_plot.png", "roc.png")), rel_path = FALSE)
+```
+
+**Performance: four estimates**
+
+```{r performance}
+perf <- rd(run, "performance.csv")
+kt(perf[, c("estimate", "auc", "auc_ci_low", "auc_ci_high", "paired_acc", "perm_null_mean_auc", "perm_p_auc")])
+perm <- rd(run, "permutation.csv")
+summary(perm[, c("n_features", "auc_train", "auc_loso_fixed_panel", "paired_acc_loso_fixed_panel")])
+```
+
+How to read this:
+
+* **A (training)** and **B (LOSO, panel fixed)** are the two estimates the
+  paper reports (0.89 and 0.78 there). The panel was chosen on the same 25
+  patients for both, so neither is an independent estimate.
+* The **permutation null** reruns the same pipeline after flipping BL/M4
+  labels within random patients, so there is *no* treatment effect. It
+  still gives training AUCs around `r sprintf("%.2f", mean(perm$auc_train))` and LOSO
+  AUCs around `r sprintf("%.2f", mean(perm$auc_loso_fixed_panel))`. The observed
+  training AUC sits at permutation *p* = `r sprintf("%.2f", perf$perm_p_auc[1])` (`r nrow(perm)` permutations).
+  With about 3,000
+  fragments, about 25 pairs and within-patient centring, high A and B values
+  are expected **even without a real effect**. An A or B value alone
+  therefore cannot show that VOCs changed.
+* **C (nested CV)** is the honest estimate. Use paired accuracy (the share of
+  patients whose 4-month sample scores higher than their baseline sample),
+  not pooled AUC: each fold's model puts scores on its own scale. The table
+  gives the mean over 5 repeats, with the min–max range in the CI columns.
+  Nested *leave-one-subject-out* is available (`--nested_folds=loso`) but
+  is biased downwards when selection is this aggressive (see the skill's SKILL.md).
+
+Per-repeat nested results, and how often each panel feature was selected
+again across the 25 nested fold fits:
+
+```{r stability}
+kt(rd(run, "nested_repeats.csv"))
+np <- rd(run, "nested_panels.csv")
+fr <- table(unlist(strsplit(np$features, ";")))
+data.frame(feature = panel$feature, compound = panel$compound,
+           fold_fits_selected = as.integer(ifelse(is.na(fr[panel$feature]), 0, fr[panel$feature])), of = nrow(np))
+kt(as.data.frame(sort(fr, decreasing = TRUE)[1:8], responseName = "fold_fits"), col.names = c("feature (top 8 across nested fits)", "fold fits"))
+```
+
+**Recall of the planted truth.** The tuned sPLS-DA model, before
+elimination, contained
+`r sum(truth$feature[truth$type == "time_effect"] %in% el$removed | truth$feature[truth$type == "time_effect"] %in% panel$feature)`
+of the 5 planted VOCs. The elimination rule then cut it down to the smallest
+set that keeps the training AUC ≥ 0.9.
+
+# The published 5-VOC panel as a fixed panel (Fig. 4)
+
+To mirror the paper's figures for the five compounds it reports, we evaluate
+that panel directly, with no selection (`--panel`). In the simulation these
+are the planted VOCs.
+
+```{r paper-panel}
+v5 <- truth$feature[truth$type == "time_effect"]
+run5 <- "splsda/BLvsM4_breath_voc_paper5"
+skill(file.path(K, "ml-multilevel-splsda/scripts/multilevel_splsda.R"),
+      c(paste0("--config=", CFG), "--layer=breath_voc", "--visits=BL,M4",
+        paste0("--panel=", paste(v5, collapse = ",")), "--plot_visits=BL,M1,M4",
+        "--colour_by=biologic", "--tag=paper5"),
+      done = file.path(RES, run5, "performance.csv"), show = 0)
+kt(rd(run5, "performance.csv")[1:2, c("estimate", "auc", "auc_ci_low", "auc_ci_high", "paired_acc")])
+kt(rd(run5, "panel.csv")[, c("compound", "class", "loading_comp1", "mean_change_z", "direction", "n_up", "n_down")])
+```
+
+```{r fig4, out.width = "100%", echo = FALSE}
+knitr::include_graphics(file.path(root, RES, run5, "panel_boxplots.png"), rel_path = FALSE)
+```
+
+Lines connect each patient's visits and are coloured by biologic. As
+planted, methyl isobutyl ketone and the alkanes/ether decrease, and
+2-ethyl-1-hexanol increases.
+
+# Baseline VOC–clinical correlations (Table 4)
+
+```{r kendall}
+skill(file.path(K, "stats-clinical-association/scripts/clinical_association.R"),
+      c(paste0("--config=", CFG), "--mode=correlation", "--layer=breath_voc",
+        paste0("--features=", paste(v5, collapse = ",")), "--vars=acq5,blood_eos,ige,feno,fev1_pp",
+        "--visit=BL", paste0("--boot=", params$boot), "--tag=BL_paper5"),
+      done = file.path(RES, "clinical/correlation_BL_paper5/kendall.csv"), show = 0)
+kt(rd("clinical/correlation_BL_paper5/kendall_table.csv"))
+kd <- rd("clinical/correlation_BL_paper5/kendall.csv")
+kt(kd[kd$p_value < 0.05, c("label", "clinical", "n", "tau", "z", "p_value", "tau_ci_low", "tau_ci_high")])
+```
+
+The two planted baseline traits are recovered: 2-ethyl-1-hexanol with ACQ
+(positive) and 1,1′-oxybis(decane) with blood eosinophils (negative). There
+are 25 unadjusted tests here, so about one would fall below *p* < 0.05 by
+chance; any extra "hits" in the table should be read that way. After BH
+adjustment:
+
+```{r kendall-bh}
+kd$p_BH <- p.adjust(kd$p_value, "BH")
+kt(kd[order(kd$p_BH)[1:4], c("label", "clinical", "tau", "p_value", "p_BH")])
+```
+
+# Influence of medication (Section 3.6)
+
+```{r exposure}
+skill(file.path(K, "stats-clinical-association/scripts/clinical_association.R"),
+      c(paste0("--config=", CFG), "--mode=exposure", "--layer=breath_voc",
+        paste0("--features=", paste(v5, collapse = ",")),
+        "--exposures=ocs_maintenance,lama,ltra,ics_dose", "--visit=BL", "--tag=BL_paper5"),
+      done = file.path(RES, "clinical/exposure_BL_paper5/exposure_tests.csv"), show = 0)
+ex <- rd("clinical/exposure_BL_paper5/exposure_tests.csv")
+kt(ex[order(ex$p_value)[1:6], c("exposure", "label", "groups", "test", "p_value")])
+```
+
+No medication was planted in the simulation, so any small *p*-values here
+are chance. With only 4 patients on maintenance OCS, this test has almost no power.
+
+# VOC change by biologic
+
+The paper saw no visual difference in VOC trajectories between biologics.
+The engine's existing `stats-group-testing` skill tests that directly. It
+compares the change from baseline (M4 − BL) between dupilumab (n = 20) and
+benralizumab (n = 5) for every fragment, with FDR correction.
+
+```{r by-biologic}
+skill(file.path(K, "stats-group-testing/scripts/group_tests.R"),
+      c(paste0("--config=", CFG), "--design=between", "--by=group", "--visit=M4",
+        "--change_from=BL", "--layers=breath_voc"),
+      done = file.path(RES, "tests/between_group_M4_minusBL/breath_voc_tests.csv"), show = 0)
+bt <- rd("tests/between_group_M4_minusBL/breath_voc_tests.csv")
+cat(sprintf("%d fragments; min FDR (Wilcoxon) = %.2f\n", nrow(bt), min(bt$fdr_wilcox, na.rm = TRUE)))
+kt(bt[bt$feature %in% v5, intersect(c("feature", "comparison", "mean_diff", "cohens_d", "p_wilcox", "fdr_wilcox"), names(bt))])
+```
+
+With 5 benralizumab patients, only very large between-drug differences could
+be detected. "No difference" here means "not detectable", not "the same".
+
+# Replication scorecard
+
+```{r scorecard, echo = FALSE}
+p5 <- rd(run5, "performance.csv")
+data.frame(
+  item = c("Fragments after contaminant removal", "VOCs in final sPLS-DA panel",
+           "Training AUROC (95% CI)", "LOSO AUROC, fixed panel (95% CI)", "Nested CV paired accuracy, mean (range)",
+           "Permutation-null training AUROC (mean)",
+           "Published 5 VOCs: training / LOSO AUROC",
+           "2-ethyl-1-hexanol ~ ACQ (tau, p)", "1,1'-oxybis(decane) ~ eosinophils (tau, p)"),
+  paper = c("3208", "5", "0.89 (0.79-0.99)", "0.78 (0.65-0.91)", "not done", "not done",
+            "0.89 / 0.78", "0.40, 0.008", "-0.30, 0.035"),
+  this_run = c(
+    sub(".*-> (\\d+) fragments.*", "\\1", grep("Known contaminants", readLines(file.path(RES, "qc/breath_voc_breath_qc.txt")), value = TRUE)),
+    nrow(panel),
+    sprintf("%.2f (%.2f-%.2f)", perf$auc[1], perf$auc_ci_low[1], perf$auc_ci_high[1]),
+    sprintf("%.2f (%.2f-%.2f)", perf$auc[2], perf$auc_ci_low[2], perf$auc_ci_high[2]),
+    sprintf("%.2f (%.2f-%.2f)", perf$paired_acc[3], perf$paired_acc_ci_low[3], perf$paired_acc_ci_high[3]),
+    sprintf("%.2f", mean(perm$auc_train)),
+    sprintf("%.2f / %.2f", p5$auc[1], p5$auc[2]),
+    with(kd[kd$label == "2-ethyl-1-hexanol" & kd$clinical == "acq5", ], sprintf("%.2f, %.3g", tau, p_value)),
+    with(kd[kd$label == "1,1'-oxybis(decane)" & kd$clinical == "blood_eos", ], sprintf("%.2f, %.3g", tau, p_value))))
+```
+
+Every "this run" number comes from the synthetic data and will change with
+the seed. Only the paper column refers to the real cohort.
+
+# What the replication shows
+
+1. **The workflow reproduces end to end with engine skills.** Three methods
+   were missing and are now skills: breath GC-MS preprocessing, multilevel
+   sPLS-DA with backward elimination and LOSO, and the Kendall / Mann–Whitney
+   / paired-change clinical statistics.
+2. **The published validation is optimistic by design.** Features were selected
+   once on all patients (stated in the paper), so the LOSO-CV of the fixed
+   panel is not independent. The permutation null shows the pipeline can
+   score highly with no effect. The nested estimate and the re-selection
+   frequencies are the numbers to carry forward to the full 3TR-ABC cohort.
+3. **The elimination rule is unstable.** "Remove while the AUC drops ≤ 5%"
+   evaluated on the training AUC tends towards one or two features, and which
+   features survive depends on chance. Inside the nested folds it often
+   leaves a single VOC. The skill offers `--elim_auc=loso` and
+   `--target_auc=NA` for sensitivity analyses.
+4. **Ambiguities in the paper's methods,** with the choices made here (all
+   are skill options):
+   relative vs absolute 5% AUC drop (relative);
+   AUC for elimination (training);
+   number of sPLS-DA components (2);
+   how keepX was tuned (sequential LOSO AUC);
+   CI method for Kendall's tau (bootstrap);
+   the log base and how zeros were handled (log2, half-minimum);
+   the definition of FEV1 ≥ 10% (percentage points).
+
+## Methods paragraph (template)
+
+> Exhaled-breath GC-MS feature tables were processed with the DMP-AE
+> `prep-breathomics-gcms` skill: known contaminants were removed, intensities were
+> log2-transformed (zeros set to half the fragment minimum) and batch effects
+> were removed with `limma::removeBatchEffect`, preserving visit. Fragments
+> were z-scored, and within-patient variation was isolated by multilevel
+> decomposition. Sparse PLS-DA (2 components; keepX tuned by leave-one-subject-out AUC)
+> was followed by backward elimination (`ml-multilevel-splsda`; engine:
+> `r sub(".*engine: (\\w+).*", "\\1", readLines(file.path(RES, run, "summary.txt"))[2])`).
+> Performance was estimated by patient-grouped 5-fold cross-validation
+> (5 repeats), with keepX tuning and elimination repeated inside each
+> training fold (nested). Significance was
+> assessed against `r params$n_perm` within-patient label permutations.
+> Clinical changes were tested with paired t or Wilcoxon signed-rank tests
+> according to the Shapiro–Wilk test, and baseline associations with Kendall's
+> tau (`stats-clinical-association`).
+
+# Reproducibility
+
+```{r session}
+cat("Results folder:", RES, "\nParameters:", paste(names(params), unlist(params), sep = "=", collapse = ", "), "\n")
+sessionInfo()
+```

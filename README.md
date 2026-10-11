@@ -12,15 +12,18 @@ study config and writes to `results/<category>/`.
 |---|---|---|---|
 | 1 | **Data preparation** | `prep-study-setup` | align layers to metadata, design audit, SummarizedExperiment / MultiAssayExperiment |
 | | | `prep-qc-normalisation` | visit-aware missingness filter, half-min / MinProb imputation, TMM, PQN, median, QC-RSD, QC PCA |
+| | | `prep-breathomics-gcms` | breath GC-MS: contaminant removal, log2 (half-min zeros), limma batch correction with confound check, PCA before/after |
 | 2 | **Exploration & dimensionality reduction** | `explore-dimension-reduction` | PCA (scree, loadings, PC–metadata tests), t-SNE, UMAP; single / multi-layer (block-scaled) |
 | 3 | **Statistics** | `stats-group-testing` | Welch t, Wilcoxon, ANOVA, Kruskal-Wallis, paired t, signed-rank, Friedman, mixed-model LRT, chi-square / Fisher Table 1 |
 | | | `stats-regression` | limma omics-wide regression, per-feature linear / logistic (OR per SD), multivariable lm / glm with CI, VIF, diagnostics |
 | | | `stats-longitudinal-de` | repeated-measures limma (duplicateCorrelation, voom) / dream: change from baseline, steps, arm × visit, F-tests |
 | | | `stats-survival` | Kaplan-Meier + log-rank, per-feature Cox (HR, PH test), elastic-net Cox (CV C-index, risk groups), multivariable Cox |
+| | | `stats-clinical-association` | Table 1 (normality-based), paired clinical change (t / signed-rank, HL CI), Kendall tau with z and bootstrap CI, Mann-Whitney by medication |
 | 4 | **Clustering** | `cluster-samples` | k-means, PAM, Ward hierarchical, Gaussian mixture, consensus; silhouette / BIC / PAC; bootstrap Jaccard; ARI |
 | | | `cluster-trajectories-longomicstraj` | [LongOmicsTraj](https://github.com/nzkermani/LongOmicsTraj) trajectory signatures (empirical / LMM / GAM / maSigPro), per-arm consensus, significance gating |
 | 5 | **Machine learning** | `ml-feature-selection` | variance filter, limma / Cox ranking, elastic-net stability selection, RF permutation importance, Boruta, consensus ranking |
 | | | `ml-classification` | PLS-DA (VIP), sPLS-DA, PCA-LDA, elastic net, random forest, linear SVM; repeated nested CV, grouped folds, permutation null |
+| | | `ml-multilevel-splsda` | multilevel (paired) sPLS-DA: keepX tuning by LOSO, backward elimination panel, training / LOSO / nested LOSO AUROC, paired accuracy, within-subject permutation null |
 | 6 | **Interpretation & integration** | `interpret-pathway-enrichment` | ssGSEA / GSVA pathway layers, fgsea on contrasts |
 | | | `integrate-multiomics` | MOFA2 + mixed-model factor tests; DIABLO with multilevel decomposition |
 | — | Router | `omics-analysis-guide` | question → skill map, shared conventions |
@@ -31,14 +34,25 @@ CLAUDE.md                  rules Claude Code follows in this project
 .mcp.json                  registers the r-longomics MCP server (mcptools)
 study_config.json          visits, times, arms, covariates, outcomes, layers
 R/lomics_utils.R           shared helpers (config, loading, lomics_xy(), args)
+R/lomics_spls.R            multilevel sPLS-DA (mixOmics or internal engine)
 mcp/longomics_tools.R      MCP tools: run_r, project_status, list_skills,
                            run_skill_script, query_trajectories,
-                           feature_report, read_result
+                           feature_report, read_result, list_usecases,
+                           run_usecase, panel_report
+usecases/                  complete worked workflows (config + synthetic
+                           data generator + R Markdown notebook)
 .claude/skills/<skill>/    SKILL.md + scripts/ (+ references/)
 setup/                     install_packages.R, Rprofile_snippet.R
 testdata/                  synthetic 60-subject, 4-visit, 3-omic study + generator
 tests/run_all_tests.sh     runs every script and checks planted signals
 ```
+
+## Use cases
+| # | folder | reproduces | skills used |
+|---|---|---|---|
+| 01 | `usecases/01_breathomics_biologics` | Vassileva et al., *Respir Med* 2026;262:109067 — exhaled VOCs before vs 4 months after benralizumab / dupilumab (3TR-ABC) | prep-study-setup, prep-breathomics-gcms, stats-clinical-association, ml-multilevel-splsda |
+
+Open the notebook in RStudio and Knit, or `run_usecase("01_breathomics_biologics")` through MCP.
 
 ## Setup
 1. Clone into (or open as) an RStudio project.

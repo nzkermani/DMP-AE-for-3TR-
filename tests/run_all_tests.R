@@ -54,6 +54,37 @@ run("pathways: ssGSEA layer", "GSVA", "interpret-pathway-enrichment/scripts/path
 run("integration: MOFA2", "MOFA2", "integrate-multiomics/scripts/integrate_mofa.R", c("study_config.json", "5", "300"))
 run("integration: DIABLO", "mixOmics", "integrate-multiomics/scripts/integrate_diablo.R", c("study_config.json", "Treatment", "2", "10", "300"))
 
+## Use case 01 (breathomics) — fast settings, separate output folder so the
+## notebook's own results are not touched
+uc_cfg <- jsonlite::fromJSON("usecases/01_breathomics_biologics/study_config.json")
+uc_cfg$output_dir <- "results/usecase01_test"
+jsonlite::write_json(uc_cfg, "tests/uc01_test_config.json", auto_unbox = TRUE, pretty = TRUE)
+UC <- "--config=tests/uc01_test_config.json"
+V5 <- "MZ052_RT0496,MZ039_RT0933,MZ098_RT1193,MZ104_RT1080,MZ141_RT1143"
+run("uc01: internal sPLS engine", "pls", "../../tests/test_spls_internal.R")
+run("uc01: setup", NA, "prep-study-setup/scripts/build_layers.R", "tests/uc01_test_config.json")
+run("uc01: breath GC-MS prep", NA, "prep-breathomics-gcms/scripts/breath_preprocess.R", UC)
+run("uc01: clinical table1", NA, "stats-clinical-association/scripts/clinical_association.R", c(UC, "--mode=table1", "--visit=BL"))
+run("uc01: clinical change", NA, "stats-clinical-association/scripts/clinical_association.R", c(UC, "--mode=change", "--vars=feno,fev1_pp,acq5", "--from=BL", "--to=M4"))
+run("uc01: Kendall correlation", NA, "stats-clinical-association/scripts/clinical_association.R", c(UC, "--mode=correlation", paste0("--features=", V5), "--vars=acq5,blood_eos", "--boot=200"))
+run("uc01: medication exposure", NA, "stats-clinical-association/scripts/clinical_association.R", c(UC, "--mode=exposure", paste0("--features=", V5), "--exposures=ocs_maintenance,ics_dose"))
+run("uc01: multilevel sPLS-DA", "pROC", "ml-multilevel-splsda/scripts/multilevel_splsda.R", c(UC, "--visits=BL,M4", "--grid=10,30,50", "--nested=FALSE", "--n_perm=0"))
+run("uc01: sPLS-DA fixed panel", "pROC", "ml-multilevel-splsda/scripts/multilevel_splsda.R", c(UC, "--visits=BL,M4", paste0("--panel=", V5), "--tag=paper5"))
+uc_chk <- tryCatch({
+  q <- readLines("results/usecase01_test/qc/breath_voc_breath_qc.txt")
+  stopifnot(any(grepl("-> 3208 fragments remain", q)))
+  k <- utils::read.csv("results/usecase01_test/clinical/correlation_BL/kendall.csv")
+  stopifnot(k$p_value[k$feature == "MZ039_RT0933" & k$clinical == "acq5"] < 0.01,
+            k$tau[k$feature == "MZ141_RT1143" & k$clinical == "blood_eos"] < 0)
+  p5 <- utils::read.csv("results/usecase01_test/splsda/BLvsM4_breath_voc_paper5/performance.csv")
+  stopifnot(p5$auc[2] > 0.8)
+  pn <- utils::read.csv("results/usecase01_test/splsda/BLvsM4_breath_voc/panel.csv")
+  stopifnot(any(pn$feature %in% strsplit(V5, ",")[[1]]))
+  TRUE
+}, error = function(e) { message("uc01 check error: ", conditionMessage(e)); FALSE })
+message(sprintf("%s  %-32s", if (uc_chk) "OK  " else "FAIL", "check: uc01 planted signals"))
+res[nrow(res) + 1, ] <- list("check: uc01 planted signals", if (uc_chk) "OK" else "FAIL", NA)
+
 ## Planted-signal checks (see testdata/simulate_testdata.R)
 chk <- tryCatch({
   cl <- utils::read.csv("results/clustering/transcriptomics+metabolomics_V1/clinical_association.csv")

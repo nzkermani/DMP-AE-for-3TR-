@@ -1,0 +1,31 @@
+{
+  "study_name": "usecase01_breathomics_biologics (synthetic, after Vassileva et al. 2026)",
+  "metadata_file": "usecases/01_breathomics_biologics/data/metadata.csv",
+  "columns": {
+    "sample": "sample_id",
+    "subject": "subject_id",
+    "visit": "visit",
+    "group": "biologic"
+  },
+  "visits": ["BL", "M1", "M4"],
+  "time_values": {"BL": 0, "M1": 1, "M4": 4},
+  "covariates": ["age", "sex"],
+  "batch_column": "gcms_batch",
+  "outcomes": {
+    "binary": "acq_responder",
+    "continuous": "acq5",
+    "categorical": ["biologic", "site"]
+  },
+  "default_visit": "BL",
+  "seed": 2026,
+  "layers": [
+    {
+      "name": "breath_voc",
+      "file": "usecases/01_breathomics_biologics/data/breath_gcms_raw.csv",
+      "scale": "gcms_intensity",
+      "feature_type": "VOC ion fragment",
+      "annotation": "usecases/01_breathomics_biologics/data/feature_annotation.csv"
+    }
+  ],
+  "output_dir": "usecases/01_breathomics_biologics/results"
+}

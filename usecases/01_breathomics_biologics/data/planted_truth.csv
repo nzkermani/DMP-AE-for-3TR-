@@ -1,0 +1,23 @@
+"feature","compound","type","effect_log_M4_vs_BL"
+"MZ052_RT0496","methyl isobutyl ketone","time_effect",-0.8
+"MZ039_RT0933","2-ethyl-1-hexanol","time_effect",0.8
+"MZ098_RT1193","5-methyloctadecane","time_effect",-0.75
+"MZ104_RT1080","2-methylundecane","time_effect",-0.75
+"MZ141_RT1143","1,1'-oxybis(decane)","time_effect",-0.75
+"MZ096_RT0704","unidentified","time_effect_background",0.194
+"MZ100_RT0509","unidentified","time_effect_background",0.116
+"MZ132_RT0476","unidentified","time_effect_background",0.106
+"MZ069_RT0413","unidentified","time_effect_background",-0.177
+"MZ135_RT0586","unidentified","time_effect_background",0.153
+"MZ188_RT1117","unidentified","time_effect_background",0.174
+"MZ088_RT0598","unidentified","time_effect_background",0.176
+"MZ079_RT0827","unidentified","time_effect_background",-0.187
+"MZ112_RT0544","unidentified","time_effect_background",-0.132
+"MZ228_RT0974","unidentified","time_effect_background",-0.113
+"MZ121_RT0941","unidentified","time_effect_background",0.175
+"MZ054_RT0446","unidentified","time_effect_background",0.172
+"MZ042_RT0786","unidentified","time_effect_background",-0.17
+"MZ230_RT0536","unidentified","time_effect_background",-0.144
+"MZ272_RT1500","unidentified","time_effect_background",0.132
+"MZ039_RT0933","2-ethyl-1-hexanol","baseline_trait: + ACQ-5",NA
+"MZ141_RT1143","1,1'-oxybis(decane)","baseline_trait: - blood eosinophils",NA

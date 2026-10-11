@@ -15,6 +15,7 @@ MCP tool `run_skill_script`). Options for the newer scripts are
 |---|---|
 | `prep-study-setup` | align matrices to metadata, audit visits/arms, build SummarizedExperiments |
 | `prep-qc-normalisation` | per-omic filtering, imputation, normalisation (TMM / PQN / median), QC PCA |
+| `prep-breathomics-gcms` | breath GC-MS / VOC layers instead of the above: contaminant removal, log2, limma batch correction (visit preserved), PCA before/after |
 
 ## 2. Exploration & dimensionality reduction
 | skill | methods |
@@ -28,6 +29,7 @@ MCP tool `run_skill_script`). Options for the newer scripts are
 | `stats-regression` | linear and logistic regression: limma omics-wide association, per-feature glm (OR / beta per SD), multivariable lm/glm with VIF and diagnostics |
 | `stats-longitudinal-de` | repeated-measures limma / dream: change from baseline, visit steps, arm × visit interaction, overall time F-test |
 | `stats-survival` | Kaplan-Meier + log-rank, per-feature Cox (HR, PH test), elastic-net Cox (CV C-index), multivariable Cox |
+| `stats-clinical-association` | Table 1 (normality-based), clinical change between visits (paired t / signed-rank), Kendall feature–clinical correlation, feature levels by medication |
 
 ## 4. Clustering
 | skill | clusters |
@@ -40,6 +42,7 @@ MCP tool `run_skill_script`). Options for the newer scripts are
 |---|---|
 | `ml-feature-selection` | variance filter, limma / Cox ranking, elastic-net stability selection, RF importance, Boruta → consensus |
 | `ml-classification` | PLS-DA (VIP), sPLS-DA, PCA-LDA, elastic net, random forest, SVM; nested repeated CV; permutation null |
+| `ml-multilevel-splsda` | paired (multilevel) sPLS-DA between two visits: keepX tuning, backward elimination to a panel, training / LOSO / nested LOSO / permutation |
 
 ## 6. Interpretation & integration
 | skill | methods |
@@ -60,6 +63,10 @@ MCP tool `run_skill_script`). Options for the newer scripts are
 | "can omics predict response, how well?" | ml-classification (+ permutation null) |
 | "which features are the best biomarkers?" | ml-feature-selection, then ml-classification for honest accuracy |
 | "which pathways?" | interpret-pathway-enrichment |
+| "which VOCs / metabolites separate baseline from follow-up within patients?" | ml-multilevel-splsda (paired) |
+| "baseline table / did clinical scores change / do the markers correlate with ACQ, eosinophils?" | stats-clinical-association |
+| "breath (GC-MS) data: contaminants, batch effect?" | prep-breathomics-gcms |
+| "reproduce paper X" / "show me a complete workflow" | see `usecases/` (worked notebooks on synthetic data) |
 | "what is shared across omics?" | integrate-multiomics |
 
 ## Shared conventions
