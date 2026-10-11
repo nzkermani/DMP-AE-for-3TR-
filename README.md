@@ -1,5 +1,6 @@
-# DMP-AE-for-3TR
+# DMP-AE for 3TR — Data Management Platform Analytics Engine
 
+The **Analytics Engine (AE)** of the 3TR **Data Management Platform (DMP)**:
 Claude Code skills, an R MCP server and tested R scripts for analysing
 transcriptomic, proteomic and metabolomic data collected at four visits in
 RStudio. Methods are grouped into six categories; every script reads one

@@ -1,4 +1,8 @@
-# Multi-omics analysis project (4 visits) — instructions for Claude
+# DMP-AE for 3TR — instructions for Claude
+
+This repository is the Analytics Engine (AE) of the 3TR Data Management
+Platform (DMP): the analysis layer for multi-omics data collected over
+4 visits.
 
 ## Study
 Design, visits, arms, covariates, outcomes and omic layers are defined in
