@@ -5,8 +5,8 @@ if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocMana
 if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
 
 cran <- c("jsonlite", "ggplot2", "dplyr", "tidyr", "tibble", "data.table",
-          "lme4", "mgcv", "emmeans", "flexmix", "cluster", "patchwork",
-          "msigdbr", "ellmer", "mcptools",
+          "lme4", "lmerTest", "pbkrtest", "mgcv", "emmeans", "flexmix", "cluster", "patchwork",
+          "msigdbr", "ellmer", "mcptools", "rmarkdown", "knitr",
           # statistics, survival, ML, dimensionality reduction
           "survival", "survminer", "car", "MASS", "glmnet", "ranger", "e1071",
           "pls", "pROC", "mclust", "Boruta", "Rtsne", "uwot", "pheatmap")

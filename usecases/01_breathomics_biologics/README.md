@@ -40,9 +40,10 @@ results/                      everything the skills write (created by the notebo
 | Kendall correlations (Table 4) | `stats-clinical-association --mode=correlation` | **new** |
 | medication Mann–Whitney | `stats-clinical-association --mode=exposure` | **new** |
 | VOC change by biologic | `stats-group-testing --design=between --change_from=BL` | existing |
+| *(added)* mixed models over BL/M1/M4, visit × biologic | `stats-mixed-models` | **new** |
 | raw chromatogram processing (XCMS) | — | out of scope (starts from the peak table) |
 
-New MCP tools: `list_usecases`, `run_usecase`, `panel_report`.
+New MCP tools: `list_usecases`, `run_usecase`, `panel_report`, `lmm_report`.
 
 ## Added beyond the paper
 - **Nested leave-one-subject-out CV:** keepX tuning and elimination are

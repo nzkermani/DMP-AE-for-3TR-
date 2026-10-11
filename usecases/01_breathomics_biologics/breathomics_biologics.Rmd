@@ -78,6 +78,7 @@ reproduce the methods, what the outputs look like, and how to check them.
 | Table 4 Kendall correlations | `stats-clinical-association --mode=correlation` *(new)* | 9 |
 | 3.6 medication (Mann–Whitney) | `stats-clinical-association --mode=exposure` *(new)* | 10 |
 | VOC change by biologic | `stats-group-testing --design=between --change_from` | 11 |
+| *(added)* all visits, missing M1 kept | `stats-mixed-models` *(new)*: `y ~ visit × biologic + (1 \| patient)` | 12 |
 
 # Synthetic cohort
 
@@ -355,6 +356,85 @@ kt(bt[bt$feature %in% v5, intersect(c("feature", "comparison", "mean_diff", "coh
 With 5 benralizumab patients, only very large between-drug differences could
 be detected. "No difference" here means "not detectable", not "the same".
 
+# Mixed-effects models using all three visits (added)
+
+The paper's tests use only the patients with both baseline and 4-month
+samples, and the 1-month visit enters only the plots. A **linear mixed
+model** uses every available sample, keeping the 10 patients without a
+1-month breath sample. It also models within-patient correlation with a
+random intercept:
+
+`y ~ visit × biologic + (1 | patient)`
+
+Here `visit` is a factor (BL, M1, M4), so no shape is assumed. The time effect, the
+time × biologic interaction and the time effect within each biologic are
+likelihood-ratio tests. Changes versus baseline come from `emmeans`. The
+skill is `stats-mixed-models`.
+
+## Clinical trajectories
+
+```{r lmm-clinical}
+skill(file.path(K, "stats-mixed-models/scripts/mixed_models.R"),
+      c(paste0("--config=", CFG), "--mode=clinical", "--vars=blood_eos,feno,ige,fev1_pp,acq5,aqlq",
+        "--log=blood_eos,feno,ige", "--by=group"),
+      done = file.path(RES, "mixed/clinical_factor_bygroup_intercept/lmm_results.csv"), show = 0)
+lc <- rd("mixed/clinical_factor_bygroup_intercept/lmm_results.csv")
+kt(lc[, c("label", "n_obs", "n_subjects", "p_time", "fdr_time", "p_interaction", "fdr_interaction",
+          "p_time_benralizumab", "p_time_dupilumab", "icc")])
+cc <- rd("mixed/clinical_factor_bygroup_intercept/contrasts.csv")
+kt(cc[cc$variable %in% c("blood_eos", "feno"), c("label", "contrast", ".grp", "estimate", "lower.CL", "upper.CL", "p.value")])
+```
+
+```{r lmm-clinical-fig, out.width = "100%", echo = FALSE}
+knitr::include_graphics(file.path(root, RES, "mixed/clinical_factor_bygroup_intercept/trajectories.png"), rel_path = FALSE)
+```
+
+The models show what Table 3 hides by pooling both drugs. Eosinophils
+**rise transiently on dupilumab (largest at 1 month) and collapse on benralizumab**: the interaction is the
+strongest effect in the table. FeNO and IgE fall mainly on dupilumab. On the
+log scale, contrasts are differences in log units, so exp(estimate) is the
+ratio to baseline. ACQ and AQLQ were not collected at 1 month, so they
+contribute only BL and M4.
+
+## VOCs: every fragment, all visits
+
+```{r lmm-voc}
+skill(file.path(K, "stats-mixed-models/scripts/mixed_models.R"),
+      c(paste0("--config=", CFG), "--mode=features", "--layer=breath_voc", "--by=group", "--report_top=12"),
+      done = file.path(RES, "mixed/features_breath_voc_factor_bygroup_intercept/lmm_results.csv"), show = 0)
+lv <- rd("mixed/features_breath_voc_factor_bygroup_intercept/lmm_results.csv")
+lv$planted <- ifelse(lv$variable %in% v5, "planted VOC", ifelse(lv$variable %in% truth$feature, "planted background", ""))
+cat(sprintf("%d fragments; time effect FDR < 0.05: %d; time x biologic FDR < 0.05: %d\n",
+            nrow(lv), sum(lv$fdr_time < 0.05), sum(lv$fdr_interaction < 0.05)))
+kt(head(lv[, c("variable", "label", "p_time", "fdr_time", "p_interaction", "fdr_interaction", "icc", "planted")], 12))
+cat("Rank of the planted VOCs by time-effect p:", paste(sprintf("%s %d", lv$label[lv$planted == "planted VOC"],
+    which(lv$planted == "planted VOC")), collapse = "; "), "\n")
+```
+
+```{r lmm-voc-fig, out.width = "100%", echo = FALSE}
+knitr::include_graphics(file.path(root, RES, "mixed/features_breath_voc_factor_bygroup_intercept/trajectories.png"), rel_path = FALSE)
+```
+
+```{r lmm-voc-int}
+kt(lv[lv$fdr_interaction < 0.05, c("variable", "label", "p_interaction", "fdr_interaction",
+                                    "p_time_benralizumab", "p_time_dupilumab", "planted")])
+```
+
+How the two approaches compare:
+
+* The mixed model tests **each fragment** with FDR control across all
+  3,208. sPLS-DA instead selects a *combination*, which gives no per-VOC
+  error control. The two answer different questions, so report both.
+* Four of the five planted VOCs rank in the top five by time effect.
+  2-ethyl-1-hexanol ranks lower in this simulation (see the printed ranks).
+  At n = 25 only the two strongest pass FDR < 0.05; the others are best
+  described as "top-ranked, not significant after correction".
+* The interaction hits above are *not* planted, so they are false
+  positives. The likely cause is that, with only 5 benralizumab patients,
+  one or two extreme patients can produce a "drug-specific" trajectory.
+  Treat any VOC × biologic finding as exploratory until there are more
+  benralizumab patients.
+
 # Replication scorecard
 
 ```{r scorecard, echo = FALSE}
@@ -387,18 +467,23 @@ the seed. Only the paper column refers to the real cohort.
 1. **The workflow reproduces end to end with engine skills.** Three methods
    were missing and are now skills: breath GC-MS preprocessing, multilevel
    sPLS-DA with backward elimination and LOSO, and the Kendall / Mann–Whitney
-   / paired-change clinical statistics.
-2. **The published validation is optimistic by design.** Features were selected
+   / paired-change clinical statistics. A fourth, mixed-effects models, was
+   added to use all three visits.
+2. **Mixed models add what the paired design throws away.** They keep the 1-month
+   visit and patients with missing samples, and they test drug × time
+   directly. The eosinophil response to the two biologics is opposite, and
+   pooled paired tests average it away.
+3. **The published validation is optimistic by design.** Features were selected
    once on all patients (stated in the paper), so the LOSO-CV of the fixed
    panel is not independent. The permutation null shows the pipeline can
    score highly with no effect. The nested estimate and the re-selection
    frequencies are the numbers to carry forward to the full 3TR-ABC cohort.
-3. **The elimination rule is unstable.** "Remove while the AUC drops ≤ 5%"
+4. **The elimination rule is unstable.** "Remove while the AUC drops ≤ 5%"
    evaluated on the training AUC tends towards one or two features, and which
    features survive depends on chance. Inside the nested folds it often
    leaves a single VOC. The skill offers `--elim_auc=loso` and
    `--target_auc=NA` for sensitivity analyses.
-4. **Ambiguities in the paper's methods,** with the choices made here (all
+5. **Ambiguities in the paper's methods,** with the choices made here (all
    are skill options):
    relative vs absolute 5% AUC drop (relative);
    AUC for elimination (training);
@@ -424,7 +509,10 @@ the seed. Only the paper column refers to the real cohort.
 > assessed against `r params$n_perm` within-patient label permutations.
 > Clinical changes were tested with paired t or Wilcoxon signed-rank tests
 > according to the Shapiro–Wilk test, and baseline associations with Kendall's
-> tau (`stats-clinical-association`).
+> tau (`stats-clinical-association`). Longitudinal changes over all three
+> visits were modelled with linear mixed models (visit × biologic fixed
+> effects, random patient intercept; likelihood-ratio tests, BH-FDR across
+> fragments; `stats-mixed-models`).
 
 # Reproducibility
 

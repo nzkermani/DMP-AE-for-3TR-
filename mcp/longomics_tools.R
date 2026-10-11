@@ -213,6 +213,23 @@ lomics_tool_panel_report <- function(run_dir) {
                                                     mean(perm$auc_loso_fixed_panel)))))
 }
 
+## 10. Summarise a mixed-model run (stats-mixed-models): top variables by
+##     time effect, interaction, and change-vs-baseline contrasts.
+lomics_tool_lmm_report <- function(run_dir, variable = "", top = 15) {
+  p <- file.path(.lomics_root(), run_dir)
+  if (!dir.exists(p)) return(paste("Not found:", run_dir))
+  r <- utils::read.csv(file.path(p, "lmm_results.csv"), check.names = FALSE)
+  cols <- intersect(c("variable", "label", "n_obs", "n_subjects", "p_time", "fdr_time", "p_interaction",
+                      "fdr_interaction", grep("^p_time_", names(r), value = TRUE), "icc", "singular"), names(r))
+  ct <- if (file.exists(file.path(p, "contrasts.csv"))) utils::read.csv(file.path(p, "contrasts.csv"), check.names = FALSE) else NULL
+  if (nzchar(variable)) { r <- r[r$variable == variable | r$label == variable, ]; if (!is.null(ct)) ct <- ct[ct$variable %in% r$variable, ] }
+  .lomics_trunc(c(sprintf("Mixed-model run: %s", run_dir),
+                  if (file.exists(file.path(p, "summary.txt"))) readLines(file.path(p, "summary.txt"), warn = FALSE)[1:3],
+                  "", utils::capture.output(print(utils::head(r[, cols], top), row.names = FALSE, digits = 3)),
+                  "", "Change vs first visit (REML emmeans):",
+                  if (!is.null(ct) && nrow(ct)) utils::capture.output(print(utils::head(ct, 3 * top), row.names = FALSE, digits = 3)) else "none"))
+}
+
 ## ---------------------------------------------------------------------------
 ## Tool registry (last expression = value returned to mcptools)
 ## ---------------------------------------------------------------------------
@@ -261,7 +278,13 @@ if (requireNamespace("ellmer", quietly = TRUE)) {
         rerun = ellmer::type_boolean("Delete the use case's results/ and recompute everything.", required = FALSE))),
     ellmer::tool(lomics_tool_panel_report, name = "panel_report",
       description = "Summarise a multilevel sPLS-DA run (ml-multilevel-splsda): training, LOSO fixed-panel and nested LOSO AUC / paired accuracy, the panel with compound annotation and direction, nested re-selection frequency, and the permutation null.",
-      arguments = list(run_dir = ellmer::type_string("Run folder relative to the project root, e.g. usecases/01_breathomics_biologics/results/splsda/BLvsM4_breath_voc.")))
+      arguments = list(run_dir = ellmer::type_string("Run folder relative to the project root, e.g. usecases/01_breathomics_biologics/results/splsda/BLvsM4_breath_voc."))),
+    ellmer::tool(lomics_tool_lmm_report, name = "lmm_report",
+      description = "Summarise a linear mixed-model run (stats-mixed-models): time-effect and time x group likelihood-ratio tests with FDR, time within each group, ICC, singular fits, and change-vs-baseline contrasts with CI. Optionally for one variable.",
+      arguments = list(
+        run_dir = ellmer::type_string("Run folder relative to the project root, e.g. usecases/01_breathomics_biologics/results/mixed/clinical_factor_bygroup_intercept."),
+        variable = ellmer::type_string("Feature ID, compound label or clinical variable, or empty for the top rows.", required = FALSE),
+        top = ellmer::type_integer("Rows to show.", required = FALSE)))
   )
 } else {
   warning("ellmer is not installed; returning no MCP tools. install.packages('ellmer')")

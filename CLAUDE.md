@@ -17,7 +17,7 @@ Start with `omics-analysis-guide`: it maps questions to skills.
 |---|---|
 | 1 Data preparation | `prep-study-setup` → `prep-qc-normalisation` (always first); breath GC-MS layers: `prep-breathomics-gcms` instead |
 | 2 Exploration | `explore-dimension-reduction` (PCA, t-SNE, UMAP) |
-| 3 Statistics | `stats-group-testing`, `stats-regression`, `stats-longitudinal-de`, `stats-survival`, `stats-clinical-association` |
+| 3 Statistics | `stats-group-testing`, `stats-regression`, `stats-longitudinal-de`, `stats-survival`, `stats-clinical-association`, `stats-mixed-models` |
 | 4 Clustering | `cluster-samples` (subjects), `cluster-trajectories-longomicstraj` (features by trajectory) |
 | 5 Machine learning | `ml-feature-selection`, `ml-classification`, `ml-multilevel-splsda` (paired visits) |
 | 6 Interpretation & integration | `interpret-pathway-enrichment`, `integrate-multiomics` |
@@ -30,14 +30,15 @@ Run `stats-longitudinal-de` before `cluster-trajectories-longomicstraj`
 a synthetic-data generator, and an R Markdown notebook that chains the skills
 (e.g. `01_breathomics_biologics` reproduces Vassileva et al. 2026). Each
 use case writes to its own `results/` folder via its config `output_dir`.
-MCP: `list_usecases`, `run_usecase`, `panel_report`.
+MCP: `list_usecases`, `run_usecase`, `panel_report`, `lmm_report`.
 
 ## How to run things
 - Analyses: run the skill scripts with `Rscript` from the project root
   (Bash), or with MCP `run_skill_script`. Every run writes to
   `results/<category>/<run>/` plus session info in `results/logs/`.
 - Inspection: MCP `run_r`, `read_result`, `project_status`,
-  `list_skills`, `query_trajectories`, `feature_report`, `panel_report`.
+  `list_skills`, `query_trajectories`, `feature_report`, `panel_report`,
+  `lmm_report`.
 - Every script accepts a config path (`--config=<path>`; the older prep,
   longitudinal, trajectory, pathway and integration scripts take it as the
   first positional argument), so the same skills run on a use case's config.

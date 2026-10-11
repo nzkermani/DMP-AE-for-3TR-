@@ -29,6 +29,7 @@ MCP tool `run_skill_script`). Options for the newer scripts are
 | `stats-regression` | linear and logistic regression: limma omics-wide association, per-feature glm (OR / beta per SD), multivariable lm/glm with VIF and diagnostics |
 | `stats-longitudinal-de` | repeated-measures limma / dream: change from baseline, visit steps, arm × visit interaction, overall time F-test |
 | `stats-survival` | Kaplan-Meier + log-rank, per-feature Cox (HR, PH test), elastic-net Cox (CV C-index), multivariable Cox |
+| `stats-mixed-models` | linear mixed models (lme4) per feature or clinical variable: time × group LRTs, FDR, ICC, emmeans change vs baseline; keeps subjects with missing visits |
 | `stats-clinical-association` | Table 1 (normality-based), clinical change between visits (paired t / signed-rank), Kendall feature–clinical correlation, feature levels by medication |
 
 ## 4. Clustering
@@ -64,6 +65,7 @@ MCP tool `run_skill_script`). Options for the newer scripts are
 | "which features are the best biomarkers?" | ml-feature-selection, then ml-classification for honest accuracy |
 | "which pathways?" | interpret-pathway-enrichment |
 | "which VOCs / metabolites separate baseline from follow-up within patients?" | ml-multilevel-splsda (paired) |
+| "mixed model / random effects / change over time with missing visits / treatment × time" | stats-mixed-models |
 | "baseline table / did clinical scores change / do the markers correlate with ACQ, eosinophils?" | stats-clinical-association |
 | "breath (GC-MS) data: contaminants, batch effect?" | prep-breathomics-gcms |
 | "reproduce paper X" / "show me a complete workflow" | see `usecases/` (worked notebooks on synthetic data) |

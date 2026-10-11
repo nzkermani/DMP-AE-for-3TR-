@@ -70,7 +70,13 @@ run("uc01: Kendall correlation", NA, "stats-clinical-association/scripts/clinica
 run("uc01: medication exposure", NA, "stats-clinical-association/scripts/clinical_association.R", c(UC, "--mode=exposure", paste0("--features=", V5), "--exposures=ocs_maintenance,ics_dose"))
 run("uc01: multilevel sPLS-DA", "pROC", "ml-multilevel-splsda/scripts/multilevel_splsda.R", c(UC, "--visits=BL,M4", "--grid=10,30,50", "--nested=FALSE", "--n_perm=0"))
 run("uc01: sPLS-DA fixed panel", "pROC", "ml-multilevel-splsda/scripts/multilevel_splsda.R", c(UC, "--visits=BL,M4", paste0("--panel=", V5), "--tag=paper5"))
+run("uc01: mixed models clinical", "lme4", "stats-mixed-models/scripts/mixed_models.R", c(UC, "--mode=clinical", "--vars=blood_eos,feno,acq5", "--log=blood_eos,feno", "--by=group"))
+run("uc01: mixed models VOCs", "lme4", "stats-mixed-models/scripts/mixed_models.R", c(UC, "--mode=features", paste0("--features=", V5, ",MZ170_RT1157,MZ067_RT0980"), "--tag=v7"))
 uc_chk <- tryCatch({
+  mm <- utils::read.csv("results/usecase01_test/mixed/clinical_factor_bygroup_intercept/lmm_results.csv")
+  stopifnot(mm$fdr_interaction[mm$variable == "blood_eos"] < 0.001)   # benralizumab depletes eosinophils
+  mv <- utils::read.csv("results/usecase01_test/mixed/features_v7/lmm_results.csv")
+  stopifnot(mean(mv$p_time[mv$variable %in% strsplit(V5, ",")[[1]]] < 0.01) >= 0.8)
   q <- readLines("results/usecase01_test/qc/breath_voc_breath_qc.txt")
   stopifnot(any(grepl("-> 3208 fragments remain", q)))
   k <- utils::read.csv("results/usecase01_test/clinical/correlation_BL/kendall.csv")
