@@ -13,7 +13,7 @@ known planted effects. A use case has:
 
 | # | folder | paper | new skills it added |
 |---|---|---|---|
-| 01 | `01_breathomics_biologics` | Vassileva *et al.*, *Respir Med* 2026 — exhaled VOCs before/after benralizumab and dupilumab | `prep-breathomics-gcms`, `ml-multilevel-splsda`, `stats-clinical-association`, `stats-mixed-models` |
+| 01 | `01_breathomics_biologics` | Vassileva *et al.*, *Respir Med* 2026 — exhaled VOCs before/after benralizumab and dupilumab | `prep-breathomics-gcms`, `ml-multilevel-splsda`, `stats-clinical-association`, `stats-mixed-models`, `prep-missing-data` |
 
 ## Adding a use case
 1. Make `usecases/<nn>_<name>/` with a config whose `output_dir` points inside the folder.

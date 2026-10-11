@@ -1,6 +1,6 @@
 ---
 name: omics-analysis-guide
-description: Catalogue and decision guide for every analysis in this project (data preparation, exploration and dimensionality reduction, statistical testing, regression, longitudinal and survival analysis, clustering, feature selection, classification, pathway and multi-omics integration). Use at the start of any analysis request, when the user asks what methods are available or which analysis to run, or when a question could map to several methods.
+description: Catalogue and decision guide for every analysis in this project (data preparation, missing data and imputation, exploration and dimensionality reduction, statistical testing, regression, longitudinal and mixed-effects models, survival analysis, clustering, feature selection, classification, pathway and multi-omics integration). Use at the start of any analysis request, when the user asks what methods are available or which analysis to run, or when a question could map to several methods.
 ---
 
 # Analysis catalogue
@@ -17,35 +17,48 @@ MCP tool `run_skill_script`). Options for the newer scripts are
 | `prep-qc-normalisation` | per-omic filtering, imputation, normalisation (TMM / PQN / median), QC PCA |
 | `prep-breathomics-gcms` | breath GC-MS / VOC layers instead of the above: contaminant removal, log2, limma batch correction (visit preserved), PCA before/after |
 
-## 2. Exploration & dimensionality reduction
+## 2. Missing data — diagnose before choosing an imputation
+| skill | methods |
+|---|---|
+| `prep-missing-data` | diagnose (MNAR signature, by visit / arm / batch, dropout patterns) → benchmark imputations (half-min, MinProb, kNN, BPCA, mean; MCAR + MNAR masking) → imputed layer; mice multiple imputation + Rubin pooling for clinical covariates |
+
+## 3. Exploration & dimensionality reduction
 | skill | methods |
 |---|---|
 | `explore-dimension-reduction` | PCA (scree, loadings, PC–metadata tests), t-SNE, UMAP; single or multi-layer; visit, change or all visits |
 
-## 3. Statistics
+## 4. Statistics (cross-sectional, paired, survival)
 | skill | methods |
 |---|---|
-| `stats-group-testing` | t / Wilcoxon, ANOVA / Kruskal, paired t / signed-rank, Friedman, mixed-model LRT, Table 1 (chi-square / Fisher) |
+| `stats-group-testing` | t / Wilcoxon, ANOVA / Kruskal, paired t / signed-rank, Friedman, Table 1 (chi-square / Fisher) |
 | `stats-regression` | linear and logistic regression: limma omics-wide association, per-feature glm (OR / beta per SD), multivariable lm/glm with VIF and diagnostics |
-| `stats-longitudinal-de` | repeated-measures limma / dream: change from baseline, visit steps, arm × visit interaction, overall time F-test |
 | `stats-survival` | Kaplan-Meier + log-rank, per-feature Cox (HR, PH test), elastic-net Cox (CV C-index), multivariable Cox |
-| `stats-mixed-models` | linear mixed models (lme4) per feature or clinical variable: time × group LRTs, FDR, ICC, emmeans change vs baseline; keeps subjects with missing visits |
 | `stats-clinical-association` | Table 1 (normality-based), clinical change between visits (paired t / signed-rank), Kendall feature–clinical correlation, feature levels by medication |
 
-## 4. Clustering
+## 5. Longitudinal & mixed-effects models
+| skill | methods |
+|---|---|
+| `stats-mixed-models` | lme4 mixed models per feature or clinical variable: visit / time × arm, random intercept or slope, LRTs + FDR, ICC, emmeans change vs baseline; keeps subjects with missing visits |
+| `stats-longitudinal-de` | repeated-measures limma / dream for thousands of features: change from baseline, visit steps, arm × visit interaction, overall time F-test |
+
+Pick `stats-mixed-models` for clinical variables, panels, unbalanced or
+missing visits and per-feature random effects; `stats-longitudinal-de` for
+fast omics-wide screens (limma with a shared within-subject correlation).
+
+## 6. Clustering
 | skill | clusters |
 |---|---|
 | `cluster-samples` | **subjects** (endotypes): k-means, PAM, Ward, GMM, consensus; silhouette / BIC / PAC; bootstrap stability; ARI |
 | `cluster-trajectories-longomicstraj` | **features** by longitudinal shape: LongOmicsTraj Omics Trajectory Signatures, k-means / FlexMix trajectory clusters |
 
-## 5. Machine learning
+## 7. Machine learning
 | skill | methods |
 |---|---|
 | `ml-feature-selection` | variance filter, limma / Cox ranking, elastic-net stability selection, RF importance, Boruta → consensus |
 | `ml-classification` | PLS-DA (VIP), sPLS-DA, PCA-LDA, elastic net, random forest, SVM; nested repeated CV; permutation null |
-| `ml-multilevel-splsda` | paired (multilevel) sPLS-DA between two visits: keepX tuning, backward elimination to a panel, training / LOSO / nested LOSO / permutation |
+| `ml-multilevel-splsda` | paired (multilevel) sPLS-DA between two visits: keepX tuning, backward elimination to a panel, training / LOSO / nested CV / permutation |
 
-## 6. Interpretation & integration
+## 8. Interpretation & integration
 | skill | methods |
 |---|---|
 | `interpret-pathway-enrichment` | ssGSEA / GSVA pathway layers (then run any skill on them), fgsea on contrasts |
@@ -66,6 +79,7 @@ MCP tool `run_skill_script`). Options for the newer scripts are
 | "which pathways?" | interpret-pathway-enrichment |
 | "which VOCs / metabolites separate baseline from follow-up within patients?" | ml-multilevel-splsda (paired) |
 | "mixed model / random effects / change over time with missing visits / treatment × time" | stats-mixed-models |
+| "how much is missing / below detection / which imputation / dropout / MCAR-MAR-MNAR / multiple imputation?" | prep-missing-data |
 | "baseline table / did clinical scores change / do the markers correlate with ACQ, eosinophils?" | stats-clinical-association |
 | "breath (GC-MS) data: contaminants, batch effect?" | prep-breathomics-gcms |
 | "reproduce paper X" / "show me a complete workflow" | see `usecases/` (worked notebooks on synthetic data) |

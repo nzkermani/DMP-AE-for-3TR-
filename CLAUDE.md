@@ -16,11 +16,13 @@ Start with `omics-analysis-guide`: it maps questions to skills.
 | category | skills |
 |---|---|
 | 1 Data preparation | `prep-study-setup` → `prep-qc-normalisation` (always first); breath GC-MS layers: `prep-breathomics-gcms` instead |
-| 2 Exploration | `explore-dimension-reduction` (PCA, t-SNE, UMAP) |
-| 3 Statistics | `stats-group-testing`, `stats-regression`, `stats-longitudinal-de`, `stats-survival`, `stats-clinical-association`, `stats-mixed-models` |
-| 4 Clustering | `cluster-samples` (subjects), `cluster-trajectories-longomicstraj` (features by trajectory) |
-| 5 Machine learning | `ml-feature-selection`, `ml-classification`, `ml-multilevel-splsda` (paired visits) |
-| 6 Interpretation & integration | `interpret-pathway-enrichment`, `integrate-multiomics` |
+| 2 Missing data | `prep-missing-data` (diagnose → benchmark → impute; mice for clinical covariates) |
+| 3 Exploration | `explore-dimension-reduction` (PCA, t-SNE, UMAP) |
+| 4 Statistics | `stats-group-testing`, `stats-regression`, `stats-survival`, `stats-clinical-association` |
+| 5 Longitudinal & mixed-effects models | `stats-mixed-models` (lme4, per feature / clinical variable), `stats-longitudinal-de` (limma / dream, omics-wide) |
+| 6 Clustering | `cluster-samples` (subjects), `cluster-trajectories-longomicstraj` (features by trajectory) |
+| 7 Machine learning | `ml-feature-selection`, `ml-classification`, `ml-multilevel-splsda` (paired visits) |
+| 8 Interpretation & integration | `interpret-pathway-enrichment`, `integrate-multiomics` |
 
 Run `stats-longitudinal-de` before `cluster-trajectories-longomicstraj`
 (it uses the time-effect FDR for gating).
@@ -61,4 +63,6 @@ MCP: `list_usecases`, `run_usecase`, `panel_report`, `lmm_report`.
   exploratory from confirmatory.
 - Survival predictors must be measured at or before time zero (baseline by default).
 - Flag confounding (batch aligned with visit or arm) explicitly.
-- State seeds and any random imputation (MinProb).
+- State seeds and any random imputation (MinProb, mice).
+- Diagnose missingness (`prep-missing-data`) before choosing an imputation;
+  never impute whole missing visits — model them (`stats-mixed-models`).

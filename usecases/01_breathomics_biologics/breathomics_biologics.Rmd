@@ -72,13 +72,14 @@ reproduce the methods, what the outputs look like, and how to check them.
 | 2.1–2.2 design, clinical data | `prep-study-setup` | 2–3 |
 | Table 1 | `stats-clinical-association --mode=table1` | 4 |
 | 3.3, Table 3, Fig. 2 | `stats-clinical-association --mode=change` | 5 |
-| 2.5 XCMS table, contaminants, log, batch (limma), Suppl. Fig. 1 | `prep-breathomics-gcms` *(new)* | 6 |
-| 2.5 multilevel sPLS-DA, stepwise elimination, AUROC, LOSO-CV; Fig. 3, Table 2 | `ml-multilevel-splsda` *(new)* | 7 |
-| Fig. 4 longitudinal boxplots | `ml-multilevel-splsda` panel boxplots | 7–8 |
-| Table 4 Kendall correlations | `stats-clinical-association --mode=correlation` *(new)* | 9 |
-| 3.6 medication (Mann–Whitney) | `stats-clinical-association --mode=exposure` *(new)* | 10 |
-| VOC change by biologic | `stats-group-testing --design=between --change_from` | 11 |
-| *(added)* all visits, missing M1 kept | `stats-mixed-models` *(new)*: `y ~ visit × biologic + (1 \| patient)` | 12 |
+| 2.5 XCMS table, contaminants, log, batch (limma), Suppl. Fig. 1 | `prep-breathomics-gcms` *(new)* | 7 |
+| 2.5 multilevel sPLS-DA, stepwise elimination, AUROC, LOSO-CV; Fig. 3, Table 2 | `ml-multilevel-splsda` *(new)* | 8 |
+| Fig. 4 longitudinal boxplots | `ml-multilevel-splsda` panel boxplots | 8–9 |
+| Table 4 Kendall correlations | `stats-clinical-association --mode=correlation` *(new)* | 10 |
+| 3.6 medication (Mann–Whitney) | `stats-clinical-association --mode=exposure` *(new)* | 11 |
+| VOC change by biologic | `stats-group-testing --design=between --change_from` | 12 |
+| *(added)* missing data: LOD zeros, missing visits / clinical values | `prep-missing-data` *(new)* | 6 |
+| *(added)* all visits, missing M1 kept | `stats-mixed-models` *(new)*: `y ~ visit × biologic + (1 \| patient)` | 13 |
 
 # Synthetic cohort
 
@@ -157,6 +158,50 @@ data.frame(
 
 The paper's "≥10%" FEV1 improvement could mean percentage points or a
 relative change; percentage points are used here.
+
+# Missing data (added)
+
+The paper does not say how it handled fragments below detection, missing
+clinical values or the incomplete 1-month visit. The `prep-missing-data`
+skill makes these choices explicit. In GC-MS tables, zeros mean "below
+detection", so they are treated as missing here (the `gcms_intensity` scale
+does this automatically).
+
+```{r missing-diagnose}
+skill(file.path(K, "prep-missing-data/scripts/missing_data.R"),
+      c(paste0("--config=", CFG), "--mode=diagnose", "--layer=breath_voc",
+        "--clinical=acq5,aqlq,blood_eos,feno,ige,fev1_pp"),
+      done = file.path(RES, "missing/diagnose_breath_voc/summary.txt"), show = 0)
+cat(readLines(file.path(RES, "missing/diagnose_breath_voc/summary.txt")), sep = "\n")
+```
+
+```{r missing-fig, out.width = "100%", echo = FALSE}
+knitr::include_graphics(file.path(root, RES, "missing/diagnose_breath_voc/diagnosis.png"), rel_path = FALSE)
+```
+
+Low-intensity fragments have more missing values, which is the signature of
+left-censoring (MNAR). To check which imputation recovers hidden values
+best, the benchmark masks 5% of the *observed* values, either at random
+(MCAR) or among each fragment's lowest values (MNAR), imputes them and
+scores each method against the truth:
+
+```{r missing-benchmark}
+skill(file.path(K, "prep-missing-data/scripts/missing_data.R"),
+      c(paste0("--config=", CFG), "--mode=benchmark", "--layer=breath_voc", "--reps=3"),
+      done = file.path(RES, "missing/benchmark_breath_voc/benchmark_summary.csv"), show = 0)
+kt(rd("missing/benchmark_breath_voc/benchmark_summary.csv"))
+```
+
+How to read it: NRMSE is the error (lower is better). Bias is the direction:
+a negative value means imputed values are too low, as half-minimum is by
+design. The preprocessing below keeps the paper-style half-minimum.
+`--mode=impute --method=knn` would write a `breath_voc_imp_knn` layer for a
+sensitivity analysis.
+
+Whole missing visits (10 patients without a 1-month sample) are **not
+imputed**; the mixed models in section 13 handle them. The missing FeNO and
+IgE values (2 patients each) are left out of the paired tests (complete
+pairs) and kept in the mixed models.
 
 # GC-MS preprocessing (Methods 2.5, Suppl. Fig. 1)
 
@@ -467,8 +512,8 @@ the seed. Only the paper column refers to the real cohort.
 1. **The workflow reproduces end to end with engine skills.** Three methods
    were missing and are now skills: breath GC-MS preprocessing, multilevel
    sPLS-DA with backward elimination and LOSO, and the Kendall / Mann–Whitney
-   / paired-change clinical statistics. A fourth, mixed-effects models, was
-   added to use all three visits.
+   / paired-change clinical statistics. Two more were added: missing-data
+   diagnosis and imputation benchmarking, and mixed-effects models that use all three visits.
 2. **Mixed models add what the paired design throws away.** They keep the 1-month
    visit and patients with missing samples, and they test drug × time
    directly. The eosinophil response to the two biologics is opposite, and

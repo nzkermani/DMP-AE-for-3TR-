@@ -41,6 +41,7 @@ results/                      everything the skills write (created by the notebo
 | medication Mann–Whitney | `stats-clinical-association --mode=exposure` | **new** |
 | VOC change by biologic | `stats-group-testing --design=between --change_from=BL` | existing |
 | *(added)* mixed models over BL/M1/M4, visit × biologic | `stats-mixed-models` | **new** |
+| *(added)* missing-data diagnosis + imputation benchmark | `prep-missing-data` | **new** |
 | raw chromatogram processing (XCMS) | — | out of scope (starts from the peak table) |
 
 New MCP tools: `list_usecases`, `run_usecase`, `panel_report`, `lmm_report`.

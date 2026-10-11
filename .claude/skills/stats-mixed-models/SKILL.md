@@ -5,7 +5,7 @@ description: Linear mixed-effects models (lme4) for longitudinal data with unbal
 
 # Mixed-effects models for longitudinal data
 
-Category: **3 Statistics**. Unlike paired tests and multilevel sPLS-DA, it uses **every
+Category: **Longitudinal & mixed-effects models**. Unlike paired tests and multilevel sPLS-DA, it uses **every
 visit of every subject**: subjects with a missing visit stay in the model.
 
 ```bash

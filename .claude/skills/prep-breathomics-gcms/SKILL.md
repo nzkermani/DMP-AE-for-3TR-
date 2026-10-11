@@ -5,7 +5,7 @@ description: Preprocess an exhaled-breath GC-MS (breathomics, VOC) feature table
 
 # Breathomics (GC-MS) preprocessing
 
-Category: **1 Data preparation** (replaces `prep-qc-normalisation` for breath layers).
+Category: **Data preparation** (replaces `prep-qc-normalisation` for breath layers).
 Run `prep-study-setup` first so `results/data/<layer>_raw_se.rds` exists.
 
 ```bash

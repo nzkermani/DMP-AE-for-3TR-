@@ -51,6 +51,11 @@ run("ml: feature selection", "glmnet", "ml-feature-selection/scripts/feature_sel
 run("ml: classification", "glmnet", "ml-classification/scripts/classification.R", c("--outcome=endotype", "--repeats=2"))
 run("ml: classification null", "glmnet", "ml-classification/scripts/classification.R", c("--outcome=endotype", "--repeats=1", "--permute_seed=1", "--layers=proteomics"))
 run("pathways: ssGSEA layer", "GSVA", "interpret-pathway-enrichment/scripts/pathway_scores.R", c("study_config.json", "transcriptomics", "testdata/test_sets.gmt"))
+run("missing: diagnose", NA, "prep-missing-data/scripts/missing_data.R", c("--mode=diagnose", "--layer=metabolomics"))
+run("missing: benchmark", "impute", "prep-missing-data/scripts/missing_data.R", c("--mode=benchmark", "--layer=proteomics", "--reps=1"))
+run("missing: impute knn layer", "impute", "prep-missing-data/scripts/missing_data.R", c("--mode=impute", "--layer=proteomics", "--method=knn"))
+run("missing: test on imputed layer", NA, "stats-group-testing/scripts/group_tests.R", c("--design=between", "--by=endotype", "--layers=proteomics_imp_knn"))
+run("missing: mice pooled lm", "mice", "prep-missing-data/scripts/missing_data.R", c("--mode=mice", "--visit=V1", "--formula=fev1 ~ age + sex + responder", "--m=5"))
 run("integration: MOFA2", "MOFA2", "integrate-multiomics/scripts/integrate_mofa.R", c("study_config.json", "5", "300"))
 run("integration: DIABLO", "mixOmics", "integrate-multiomics/scripts/integrate_diablo.R", c("study_config.json", "Treatment", "2", "10", "300"))
 
@@ -70,9 +75,12 @@ run("uc01: Kendall correlation", NA, "stats-clinical-association/scripts/clinica
 run("uc01: medication exposure", NA, "stats-clinical-association/scripts/clinical_association.R", c(UC, "--mode=exposure", paste0("--features=", V5), "--exposures=ocs_maintenance,ics_dose"))
 run("uc01: multilevel sPLS-DA", "pROC", "ml-multilevel-splsda/scripts/multilevel_splsda.R", c(UC, "--visits=BL,M4", "--grid=10,30,50", "--nested=FALSE", "--n_perm=0"))
 run("uc01: sPLS-DA fixed panel", "pROC", "ml-multilevel-splsda/scripts/multilevel_splsda.R", c(UC, "--visits=BL,M4", paste0("--panel=", V5), "--tag=paper5"))
+run("uc01: missing-data diagnose", NA, "prep-missing-data/scripts/missing_data.R", c(UC, "--mode=diagnose", "--layer=breath_voc"))
 run("uc01: mixed models clinical", "lme4", "stats-mixed-models/scripts/mixed_models.R", c(UC, "--mode=clinical", "--vars=blood_eos,feno,acq5", "--log=blood_eos,feno", "--by=group"))
 run("uc01: mixed models VOCs", "lme4", "stats-mixed-models/scripts/mixed_models.R", c(UC, "--mode=features", paste0("--features=", V5, ",MZ170_RT1157,MZ067_RT0980"), "--tag=v7"))
 uc_chk <- tryCatch({
+  dg <- readLines("results/usecase01_test/missing/diagnose_breath_voc/summary.txt")
+  stopifnot(any(grepl("strong negative", dg)))   # planted LOD censoring detected as MNAR
   mm <- utils::read.csv("results/usecase01_test/mixed/clinical_factor_bygroup_intercept/lmm_results.csv")
   stopifnot(mm$fdr_interaction[mm$variable == "blood_eos"] < 0.001)   # benralizumab depletes eosinophils
   mv <- utils::read.csv("results/usecase01_test/mixed/features_v7/lmm_results.csv")

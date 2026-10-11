@@ -5,7 +5,7 @@ description: Paired / repeated-measures biomarker panel discovery between two vi
 
 # Multilevel sPLS-DA (paired visits)
 
-Category: **5 Machine learning**. Needs a processed layer (`prep-*`).
+Category: **Machine learning**. Needs a processed layer (`prep-*`).
 
 ```bash
 S=.claude/skills/ml-multilevel-splsda/scripts/multilevel_splsda.R

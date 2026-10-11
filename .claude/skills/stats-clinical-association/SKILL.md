@@ -5,7 +5,7 @@ description: Clinical endpoint statistics for small longitudinal cohorts — Tab
 
 # Clinical change, correlation and exposure checks
 
-Category: **3 Statistics**.
+Category: **Statistics**.
 
 ```bash
 S=.claude/skills/stats-clinical-association/scripts/clinical_association.R
