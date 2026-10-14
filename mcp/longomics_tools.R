@@ -161,6 +161,75 @@ lomics_tool_read_result <- function(path, max_rows = 40) {
   .lomics_trunc(readLines(p, warn = FALSE))
 }
 
+## 7. Worked use cases (usecases/<nn>_<name>/): list them.
+lomics_tool_list_usecases <- function() {
+  d <- list.dirs(file.path(.lomics_root(), "usecases"), recursive = FALSE)
+  if (!length(d)) return("No use cases found in usecases/.")
+  rows <- vapply(d, function(p) {
+    rd <- file.path(p, "README.md")
+    title <- if (file.exists(rd)) sub("^#+\\s*", "", grep("^#", readLines(rd, warn = FALSE), value = TRUE)[1]) else ""
+    nb <- paste(basename(Sys.glob(file.path(p, "*.Rmd"))), collapse = ", ")
+    html <- file.exists(sub("\\.Rmd$", ".html", Sys.glob(file.path(p, "*.Rmd"))[1]))
+    sprintf("- %s: %s | notebook: %s | rendered: %s | config: %s", basename(p), title, nb,
+            if (isTRUE(html)) "yes" else "no", if (file.exists(file.path(p, "study_config.json"))) "yes" else "no")
+  }, "")
+  .lomics_trunc(c("Use cases (complete workflows on synthetic data):", rows))
+}
+
+## 8. Render a use-case notebook in a separate R process (keeps RStudio free).
+##    rerun = TRUE deletes the use case's results/ first so every step reruns.
+lomics_tool_run_usecase <- function(name, rerun = FALSE) {
+  p <- file.path(.lomics_root(), "usecases", name)
+  nb <- Sys.glob(file.path(p, "*.Rmd"))
+  if (!length(nb)) return(paste("No .Rmd notebook in usecases/", name))
+  if (isTRUE(rerun)) unlink(file.path(p, "results"), recursive = TRUE)
+  old <- setwd(.lomics_root()); on.exit(setwd(old))
+  rscript <- file.path(R.home("bin"), if (.Platform$OS.type == "windows") "Rscript.exe" else "Rscript")
+  code <- sprintf("rmarkdown::render('%s', quiet = TRUE)", gsub("\\\\", "/", nb[1]))
+  out <- suppressWarnings(system2(rscript, c("-e", shQuote(code)), stdout = TRUE, stderr = TRUE))
+  status <- attr(out, "status"); if (is.null(status)) status <- 0
+  .lomics_trunc(c(sprintf("render %s: exit status %s", basename(nb[1]), status),
+                  sprintf("output: %s", sub("\\.Rmd$", ".html", nb[1])), utils::tail(out, 60)))
+}
+
+## 9. Summarise a multilevel sPLS-DA run: performance, panel, stability.
+##    run_dir is relative to the project root, e.g.
+##    "usecases/01_breathomics_biologics/results/splsda/BLvsM4_breath_voc"
+lomics_tool_panel_report <- function(run_dir) {
+  p <- file.path(.lomics_root(), run_dir)
+  if (!dir.exists(p)) return(paste("Not found:", run_dir))
+  rd <- function(f) if (file.exists(file.path(p, f))) utils::read.csv(file.path(p, f), check.names = FALSE) else NULL
+  perf <- rd("performance.csv"); panel <- rd("panel.csv"); nest <- rd("nested_panels.csv"); perm <- rd("permutation.csv")
+  stab <- if (!is.null(nest) && !is.null(panel)) {
+    f <- table(unlist(strsplit(nest$features, ";")))
+    sprintf("%s: re-selected in %d/%d nested folds", panel$feature, as.integer(ifelse(is.na(f[panel$feature]), 0, f[panel$feature])), nrow(nest))
+  }
+  .lomics_trunc(c(sprintf("sPLS-DA run: %s", run_dir), "", "Performance:",
+                  if (!is.null(perf)) utils::capture.output(print(perf, row.names = FALSE, digits = 3)) else "none",
+                  "", "Panel:", if (!is.null(panel)) utils::capture.output(print(panel, row.names = FALSE)) else "none",
+                  "", "Stability:", if (length(stab)) stab else "no nested run",
+                  if (!is.null(perm)) c("", sprintf("Permutation null (n = %d): training AUC mean %.2f (range %.2f-%.2f); LOSO fixed-panel AUC mean %.2f",
+                                                    nrow(perm), mean(perm$auc_train), min(perm$auc_train), max(perm$auc_train),
+                                                    mean(perm$auc_loso_fixed_panel)))))
+}
+
+## 10. Summarise a mixed-model run (stats-mixed-models): top variables by
+##     time effect, interaction, and change-vs-baseline contrasts.
+lomics_tool_lmm_report <- function(run_dir, variable = "", top = 15) {
+  p <- file.path(.lomics_root(), run_dir)
+  if (!dir.exists(p)) return(paste("Not found:", run_dir))
+  r <- utils::read.csv(file.path(p, "lmm_results.csv"), check.names = FALSE)
+  cols <- intersect(c("variable", "label", "n_obs", "n_subjects", "p_time", "fdr_time", "p_interaction",
+                      "fdr_interaction", grep("^p_time_", names(r), value = TRUE), "icc", "singular"), names(r))
+  ct <- if (file.exists(file.path(p, "contrasts.csv"))) utils::read.csv(file.path(p, "contrasts.csv"), check.names = FALSE) else NULL
+  if (nzchar(variable)) { r <- r[r$variable == variable | r$label == variable, ]; if (!is.null(ct)) ct <- ct[ct$variable %in% r$variable, ] }
+  .lomics_trunc(c(sprintf("Mixed-model run: %s", run_dir),
+                  if (file.exists(file.path(p, "summary.txt"))) readLines(file.path(p, "summary.txt"), warn = FALSE)[1:3],
+                  "", utils::capture.output(print(utils::head(r[, cols], top), row.names = FALSE, digits = 3)),
+                  "", "Change vs first visit (REML emmeans):",
+                  if (!is.null(ct) && nrow(ct)) utils::capture.output(print(utils::head(ct, 3 * top), row.names = FALSE, digits = 3)) else "none"))
+}
+
 ## ---------------------------------------------------------------------------
 ## Tool registry (last expression = value returned to mcptools)
 ## ---------------------------------------------------------------------------
@@ -198,7 +267,24 @@ if (requireNamespace("ellmer", quietly = TRUE)) {
       description = "Read a result file (CSV preview or text) by path relative to the project root, e.g. 'results/de/de_summary.csv' or 'results/qc/proteomics_qc_summary.txt'.",
       arguments = list(
         path = ellmer::type_string("Path relative to the project root."),
-        max_rows = ellmer::type_integer("Rows to show for CSV files.", required = FALSE)))
+        max_rows = ellmer::type_integer("Rows to show for CSV files.", required = FALSE))),
+    ellmer::tool(lomics_tool_list_usecases, name = "list_usecases",
+      description = "List the worked use cases in usecases/ (complete workflows that reproduce a publication on synthetic data): title, notebook, whether it has been rendered.",
+      arguments = list()),
+    ellmer::tool(lomics_tool_run_usecase, name = "run_usecase",
+      description = "Render a use case's R Markdown notebook (usecases/<name>/*.Rmd) in a separate R process and return the exit status, output HTML path and the last log lines. Steps whose results exist are reused unless rerun = TRUE. Can take several minutes.",
+      arguments = list(
+        name = ellmer::type_string("Use-case folder name, e.g. 01_breathomics_biologics."),
+        rerun = ellmer::type_boolean("Delete the use case's results/ and recompute everything.", required = FALSE))),
+    ellmer::tool(lomics_tool_panel_report, name = "panel_report",
+      description = "Summarise a multilevel sPLS-DA run (ml-multilevel-splsda): training, LOSO fixed-panel and nested LOSO AUC / paired accuracy, the panel with compound annotation and direction, nested re-selection frequency, and the permutation null.",
+      arguments = list(run_dir = ellmer::type_string("Run folder relative to the project root, e.g. usecases/01_breathomics_biologics/results/splsda/BLvsM4_breath_voc."))),
+    ellmer::tool(lomics_tool_lmm_report, name = "lmm_report",
+      description = "Summarise a linear mixed-model run (stats-mixed-models): time-effect and time x group likelihood-ratio tests with FDR, time within each group, ICC, singular fits, and change-vs-baseline contrasts with CI. Optionally for one variable.",
+      arguments = list(
+        run_dir = ellmer::type_string("Run folder relative to the project root, e.g. usecases/01_breathomics_biologics/results/mixed/clinical_factor_bygroup_intercept."),
+        variable = ellmer::type_string("Feature ID, compound label or clinical variable, or empty for the top rows.", required = FALSE),
+        top = ellmer::type_integer("Rows to show.", required = FALSE)))
   )
 } else {
   warning("ellmer is not installed; returning no MCP tools. install.packages('ellmer')")

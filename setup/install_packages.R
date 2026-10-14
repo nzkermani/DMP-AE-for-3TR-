@@ -5,14 +5,14 @@ if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocMana
 if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
 
 cran <- c("jsonlite", "ggplot2", "dplyr", "tidyr", "tibble", "data.table",
-          "lme4", "mgcv", "emmeans", "flexmix", "cluster", "patchwork",
-          "msigdbr", "ellmer", "mcptools",
+          "lme4", "lmerTest", "pbkrtest", "mice", "mgcv", "emmeans", "flexmix", "cluster", "patchwork",
+          "msigdbr", "ellmer", "mcptools", "rmarkdown", "knitr",
           # statistics, survival, ML, dimensionality reduction
           "survival", "survminer", "car", "MASS", "glmnet", "ranger", "e1071",
           "pls", "pROC", "mclust", "Boruta", "Rtsne", "uwot", "pheatmap")
 bioc <- c("SummarizedExperiment", "MultiAssayExperiment", "S4Vectors",
           "BiocParallel", "limma", "edgeR", "variancePartition", "GSVA",
-          "fgsea", "MOFA2", "mixOmics", "maSigPro", "ConsensusClusterPlus")
+          "fgsea", "impute", "pcaMethods", "MOFA2", "mixOmics", "maSigPro", "ConsensusClusterPlus")
 
 need_cran <- setdiff(cran, rownames(installed.packages()))
 if (length(need_cran)) install.packages(need_cran)

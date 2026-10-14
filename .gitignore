@@ -10,3 +10,7 @@ data/
 !testdata/
 tests/test_log.txt
 tests/test_summary.csv
+
+# use cases: synthetic data and generators are committed; results are not
+!usecases/*/data/
+tests/uc01_test_config.json
